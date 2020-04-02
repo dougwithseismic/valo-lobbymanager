@@ -38,6 +38,13 @@ const examplePlayer = {
   username: 'Sentry'
 }
 
+const defaultLobby = {
+  players: [],
+  team1: [],
+  team2: [],
+  status: 0
+}
+
 import { EventEmitter } from 'events'
 const lobbyManager = new EventEmitter()
 
@@ -50,18 +57,29 @@ lobbyManager.on('lobbyChange', ({ change, data }) => {
   // For example, when the Lobby is ready with 10 players, START GAME!
   if (data.status === 0 && data.players.length === 10) {
     db.collection('lobbies').doc(data.uid).update({ status: 1 }).then((result) => {
-      startGame(data.uid) // Starts the team splitting and other game methods.
+      lobbyManager.emit('lobbyStart', { ...change.doc.data(), uid: change.doc.id })
     })
   }
 })
 
+// When 'lobbyStart' event is heard... do stuff.
+lobbyManager.on('lobbyStart', (lobby) => {
+  console.log(lobby)
+  startGame(data.uid) // Starts the team splitting and other game methods.
+})
+
 const startGame = async (uid) => {
   let lobby = await getLobbyData(uid)
+
   const team1 = shuffle(lobby.players)
   const team2 = team1.splice(0, team1.length / 2)
 
   console.log('teams :', team1, team2)
-  db.collection('lobbies').doc(uid).update({ team1, team2 }).then((response) => console.log(response))
+  // Update firebase with teams
+  db.collection('lobbies').doc(uid).update({ team1, team2 }).then((response) => {
+    console.log(response)
+    // DO DISCORD STUFF HERE LIKE SEND MESSAGES
+  })
 }
 
 const shuffle = (array) => {
@@ -81,12 +99,7 @@ const shuffle = (array) => {
   return array
 }
 
-const defaultLobby = {
-  players: [],
-  team1: [],
-  team2: [],
-  status: 0
-}
+
 
 // Emits event when lobbies are changed.
 

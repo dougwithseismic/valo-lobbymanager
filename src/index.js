@@ -20,7 +20,9 @@ app.get('/stream', (req, res) => {
     'cache-control': 'no-cache',
     'content-type': 'application/json'
   })
-
+  setInterval(() => {
+    res.write(JSON.stringify({ status: 'start lobby' }))
+  }, 5000)
 })
 
 app.post('/transactions', async (req, res) => {})
