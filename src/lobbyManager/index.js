@@ -2,6 +2,8 @@ import firebase from 'firebase/app'
 import 'firebase/firestore'
 import 'firebase/auth'
 
+import {DiscordBot} from '../discordBot'
+
 const firebaseConfig = {
   apiKey: 'AIzaSyCqPn5N0CO7OdHCclWa8wIH6pJGahEYszQ',
   authDomain: 'valovalorant-3a547.firebaseapp.com',
@@ -99,8 +101,6 @@ const shuffle = (array) => {
   return array
 }
 
-
-
 // Emits event when lobbies are changed.
 
 // MAIN HOOK
@@ -140,7 +140,6 @@ const LobbyManager = () => {
  * @function addPlayerToLobby(uid, player)
  * @param {string} uid - The uid of the lobby the player should be added to.
  * @param {player} player - The player object createPlayer(player, source)
- * 
  */
   const addPlayerToLobby = async (uid, user) => {
     let response = null
@@ -195,3 +194,7 @@ LobbyManager().init() // Init first to get the snapshots running.
 //   source: 'discord',
 //   username: 'Sentry'
 // })
+
+
+const { helloWorld } = DiscordBot()
+helloWorld()
