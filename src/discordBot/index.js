@@ -125,19 +125,19 @@ const DiscordBot = () => {
           console.log(chalk.blueBright('Finished: Discord Channels & Permissions Created'))
           console.log(chalk.greenBright('Updating Firebase with Discord Channel Details'))
 
-          console.log('channelArray :', channelArray)
-
           const channelDetails = channelArray.map((channel) => {
-            console.log('channel :', channel)
             return { id: channel.id, name: channel.name }
           })
 
-          console.log('discordDetails :', channelDetails)
-
+          // Here, we'll update our lobby with the discord details needed for later use.
           db
             .collection('lobbies')
             .doc(lobbyId)
             .update({ discord: { channels: channelDetails, permissionRoleId: role.id } })
+
+          db
+            .collection('discordEntities')
+            .add({ lobbyId: lobbyId, channels: channelDetails, permissionRoleId: role.id })
         })
         .catch(console.error)
     })
