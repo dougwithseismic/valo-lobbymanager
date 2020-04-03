@@ -5,7 +5,11 @@ import 'babel-polyfill'
 
 // import "./app";
 
-import './lobbyManager'
+import { LobbyManager } from './lobbyManager'
+import './discordBot'
+
+// Import like so. Is this the right place for it?
+LobbyManager() // Init first to get the snapshots running.
 
 let port = process.env.PORT || 3000
 
@@ -16,7 +20,7 @@ app.use(express.urlencoded({ extended: true }))
 
 app.get('/stream', (req, res) => {
   res.status(200).set({
-    'connection': 'keep-alive',
+    connection: 'keep-alive',
     'cache-control': 'no-cache',
     'content-type': 'application/json'
   })

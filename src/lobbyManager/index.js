@@ -1,130 +1,114 @@
-import firebase from 'firebase/app'
-import 'firebase/firestore'
-import 'firebase/auth'
-
-import {DiscordBot} from '../discordBot'
-
-const firebaseConfig = {
-  apiKey: 'AIzaSyCqPn5N0CO7OdHCclWa8wIH6pJGahEYszQ',
-  authDomain: 'valovalorant-3a547.firebaseapp.com',
-  databaseURL: 'https://valovalorant-3a547.firebaseio.com',
-  projectId: 'valovalorant-3a547',
-  storageBucket: 'valovalorant-3a547.appspot.com',
-  messagingSenderId: '737303209890',
-  appId: '1:737303209890:web:b74e7f43c3cd1e530034fb',
-  measurementId: 'G-FGVH9BS241'
-}
-
-// Initialize Firebase
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig)
-}
-
-// Make a reference to Firestore (the db)
-const db = firebase.firestore()
-
-const createPlayer = (player) => {
-  return {
-    ...player
-  }
-}
-
-const examplePlayer = {
-  avatar: null,
-  bot: false,
-  discriminator: '1053',
-  id: '11112222233333344444',
-  lastMessageChannelID: '695015685155192872',
-  lastMessageID: '695256234374463520',
-  source: 'discord',
-  username: 'Sentry'
-}
-
-const defaultLobby = {
-  players: [],
-  team1: [],
-  team2: [],
-  status: 0
-}
-
+import { initFirebase } from '../firebaseAuth.js'
+import { defaultLobby, createPlayer, shuffleTeams } from '../helpers/lobbyHelpers'
 import { EventEmitter } from 'events'
-const lobbyManager = new EventEmitter()
 
-let lobbyList = []
-// Listens for changes to lobbies
-lobbyManager.on('lobbyChange', ({ change, data }) => {
-  console.log('lobbyChange :', change, data)
-  // Do something every time a lobby updates.
+const db = initFirebase()
 
-  // For example, when the Lobby is ready with 10 players, START GAME!
-  if (data.status === 0 && data.players.length === 10) {
-    db.collection('lobbies').doc(data.uid).update({ status: 1 }).then((result) => {
-      lobbyManager.emit('lobbyStart', { ...change.doc.data(), uid: change.doc.id })
-    })
-  }
-})
-
-// When 'lobbyStart' event is heard... do stuff.
-lobbyManager.on('lobbyStart', (lobby) => {
-  console.log(lobby)
-  startGame(data.uid) // Starts the team splitting and other game methods.
-})
-
-const startGame = async (uid) => {
-  let lobby = await getLobbyData(uid)
-
-  const team1 = shuffle(lobby.players)
-  const team2 = team1.splice(0, team1.length / 2)
-
-  console.log('teams :', team1, team2)
-  // Update firebase with teams
-  db.collection('lobbies').doc(uid).update({ team1, team2 }).then((response) => {
-    console.log(response)
-    // DO DISCORD STUFF HERE LIKE SEND MESSAGES
-  })
-}
-
-const shuffle = (array) => {
-  let m = array.length,
-    t,
-    i
-  // While there remain elements to shuffle…
-  while (m) {
-    // Pick a remaining element…
-    i = Math.floor(Math.random() * m--)
-
-    // And swap it with the current element.
-    t = array[m]
-    array[m] = array[i]
-    array[i] = t
-  }
-  return array
-}
-
-// Emits event when lobbies are changed.
+export const lobbyListener = new EventEmitter()
 
 // MAIN HOOK
-const LobbyManager = () => {
-  const init = () =>
-    db.collection('lobbies').onSnapshot((snapshot) => {
+// MAIN HOOK
+// MAIN HOOK
+// MAIN HOOK
+// MAIN HOOK
+
+export const LobbyManager = () => {
+  // NOTE: Emmiters can live here, but not listeners? Loading LobbyManager in multiple places creates multiple listeners (that repeat their actions)
+
+  let activeLobby = null
+
+  // Listens for changes on lobbyChange
+  lobbyListener.on('lobbyChange', ({ change, data }) => {
+    // console.log('lobbyChange :', change, data)
+
+    // Do something every time a lobby updates.
+    // For example, when the Lobby is ready with 10 players, START GAME!
+    if (data.status === 0 && data.players.length === 10) {
+      db.collection('lobbies').doc(data.uid).update({ status: 1 }).then((result) => {
+        lobbyListener.emit('lobbyStart', { ...data, uid: data.uid }) // Example of emit
+      })
+    }
+  })
+
+  lobbyListener.on('lobbyCreate', (lobbyUid) => {
+    /*
+    When a lobby is created, we should..
+    - Set the active lobby to lobbyUid (Assuming we'll only ever have one active lobby?)
+    - 
+    
+    DISCORD
+    - Open the lobby up for !joins (valo messages channel and starts accepting joins)  
+    - Procure a pregame lobby (text + voice) https://discord.js.org/#/docs/main/stable/class/GuildChannelManager
+    - Create permissions for those channels (and somehow revoke at end of game, meaning we need to define a game end..
+    
+    WEB
+    - Open the lobby up for clients to join
+
+    */
+
+    console.log('Lobby Created', lobbyUid)
+  })
+
+  lobbyListener.on('lobbyStart', (lobby) => {
+    /*
+    - Change lobby status to 1
+    - Shuffle and update teams
+    
+    DISCORD
+    - DM Players to tell them team name, teammates, connection info  
+    - 
+    
+    */
+    startGame(lobby.uid) // Starts the team splitting and other game methods.
+  })
+
+  const startGame = async (uid) => {
+    let lobby = await getLobbyData(uid)
+    const team1 = shuffleTeams(lobby.players)
+    const team2 = team1.splice(0, team1.length / 2)
+
+    db.collection('lobbies').doc(uid).update({ team1, team2 }).then((response) => {
+      console.log(response)
+    })
+  }
+
+  /* 
+
+  When lobby manager initialises, we should..
+
+    - Get the last X lobbies (we dont need all of them)
+    - If there's an open lobby waiting for players, (status 0) set that as the active lobby
+    - If there are no lobbies, or there are only closed lobbies (status > 0) , create a new one and set as active lobby, as above.
+
+  */
+
+  const init = async () => {
+    // Grab a snapshot of our current lobbies
+    db.collection('lobbies').orderBy('created_at', 'desc').onSnapshot((snapshot) => {
       if (snapshot.size) {
-        // lobbyList = snapshot.docs.map((doc) => doc)
+        // let lobbyList = snapshot.docs.map((doc) => doc.data())
+
+        // If there are no active lobbies, create one.
+        snapshot.docs.map((doc) => doc.data()).filter((lobby) => lobby.status === 0).length === 0 && createLobby()
+
+        // Listen for changes.
         snapshot.docChanges().forEach((change) => {
-          //   if (change.type === 'added') {
-          lobbyManager.emit('lobbyChange', { change: change.type, data: { ...change.doc.data(), uid: change.doc.id } })
-          //  }
+          lobbyListener.emit('lobbyChange', { change: change.type, data: { ...change.doc.data(), uid: change.doc.id } })
         })
-        // we have something
       } else {
-        // it's empty so create our first lobby.
+        // it's empty so create our first lobby and set it as our active lobby.
         console.log('No Lobbies Found - Creating New Lobby')
         createLobby()
       }
     })
+  }
 
+  // Creates a lobby then returns the new lobby uid
   const createLobby = () => {
     db.collection('lobbies').add(defaultLobby).then((ref) => {
-      // db.collection('lobbies').doc(ref.id).update({ uid: ref.id })
+      lobbyListener.emit('lobbyCreate', ref.id)
+      activeLobby = ref.id
+      db.collection('lobbies').doc(ref.id).update({ uid: ref.id })
     })
   }
 
@@ -144,9 +128,9 @@ const LobbyManager = () => {
   const addPlayerToLobby = async (uid, user) => {
     let response = null
     // If the lobby is still accepting players, lets add more players.
-    const lobbyStatus = await getLobbyData(uid)
+    const lobby = await getLobbyData(uid)
 
-    if (lobbyStatus !== undefined && lobbystatus === 0) {
+    if (lobby !== undefined && lobby.status === 0) {
       // First lets check whether the player already exists.
       const foundPlayer = await findPlayerInLobby(uid, user)
       if (!foundPlayer) {
@@ -156,6 +140,7 @@ const LobbyManager = () => {
 
         console.log('updatedPlayers :', updatedPlayers)
         await db.collection('lobbies').doc(uid).update({ players: updatedPlayers }).then((result) => {
+          console.log('result :', result)
           //   lobbyCheck(uid) // When we get 10 players in, we're full!
           response = { success: 'player Added', err: null }
         })
@@ -177,12 +162,26 @@ const LobbyManager = () => {
     return foundPlayer
   }
 
-  return { init, addPlayerToLobby, findPlayerInLobby, getLobbyData }
+  const getActiveLobby = async () => {
+    if (!activeLobby) {
+      try {
+        const snapshot = await db.collection('lobbies').orderBy('created_at', 'desc').get()
+        return snapshot.docs.map((doc) => doc.data())[0]
+      } catch (e) {
+        console.log(e)
+        throw e // let caller know the promise was rejected with this reason
+      }
+    } else {
+      return activeLobby
+    }
+  }
+
+  init()
+
+  return { init, getActiveLobby, addPlayerToLobby, findPlayerInLobby, getLobbyData }
 }
 
-// Import like so.
-const { addPlayerToLobby, findPlayerInLobby, getLobbyData } = LobbyManager()
-LobbyManager().init() // Init first to get the snapshots running.
+// let activeLobby = getActiveLobby().then((result) => result)
 
 // addPlayerToLobby('WIeztTgnggQHwS1tFEJu', {
 //   avatar: null,
@@ -195,6 +194,4 @@ LobbyManager().init() // Init first to get the snapshots running.
 //   username: 'Sentry'
 // })
 
-
-const { helloWorld } = DiscordBot()
-helloWorld()
+export default LobbyManager
