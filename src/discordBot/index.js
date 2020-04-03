@@ -1,11 +1,26 @@
 import Discord from 'discord.js'
 import { LobbyManager, lobbyListener } from '../lobbyManager'
 import { initFirebase } from '../firebaseAuth.js'
+import chalk from 'chalk'
 
 const db = initFirebase()
-
+const { getActiveLobby, addPlayerToLobby } = LobbyManager()
 const { Client } = Discord
-import chalk from 'chalk'
+
+/*
+DiscordBot() contains all the logic needed to interact with discord.js
+Most of the logic reacts to emitters from lobbyListener (imported from the LobbyManager)
+
+lobbyCreate - When a new lobby gets created, we generate new permissions & channels then update the lobby object 
+lobbyStart - After a lobby gets 10 players and teams as split: Here we give permissions & Move Discord players to their right places
+
+[x] !join - Adds a discord user to the queue TODO: Allow map votes with !join haven
+[ ] !leave - Remove a discord user from the queue
+[ ] think of a good way to do votes - typing is lame, can we do it in a more interactive way?
+
+!GG - Nukes the server for when it gets messy (requires you to be Sentry ;)
+
+*/
 
 const DiscordBot = () => {
   const bot = new Client()
@@ -24,15 +39,17 @@ const DiscordBot = () => {
     // Lets grab our server objects so we can create channels etc
     const guild = bot.guilds.cache.map((guild) => guild)[0]
 
-    // Proof of concept - Create channels, permissions, and add them to user.
-
+    // Lobby Creator - Create channels / permissions and update Firebase lobby
     lobbyListener.on('lobbyCreate', (lobbyId) => {
       console.log(chalk.green('Creating Discord Lobby Actions for ', lobbyId))
+
+      // Team 0 = everyone, team 1 = Team Hype, team 2 = Team Hazard
       const channels = [
         {
           name: `PREMATCH LOBBY`,
           role: 'voice-lobby',
           type: 'voice',
+          team: 0,
           permissions: [
             { deny: [ 'CONNECT' ] },
             {
@@ -43,7 +60,7 @@ const DiscordBot = () => {
         {
           name: `TEAM HYPE`,
           role: 'voice-team',
-          team: 0,
+          team: 1,
           type: 'voice',
           permissions: [
             { deny: [ 'CONNECT' ] },
@@ -55,7 +72,7 @@ const DiscordBot = () => {
         {
           name: `TEAM HAZARD`,
           role: 'voice-team',
-          team: 1,
+          team: 2,
           type: 'voice',
           permissions: [
             { deny: [ 'CONNECT' ] },
@@ -68,6 +85,7 @@ const DiscordBot = () => {
           name: `MATCH DETAILS`,
           type: 'text',
           role: 'text-lobby',
+          team: 0,
           permissions: [
             { deny: [ 'VIEW_CHANNEL' ] },
             {
@@ -126,7 +144,7 @@ const DiscordBot = () => {
           console.log(chalk.greenBright('Updating Firebase with Discord Channel Details'))
 
           const channelDetails = channelArray.map((channel) => {
-            return { id: channel.id, name: channel.name }
+            return { id: channel.id, name: channel.name, team: channel.team, type: channel.type, role: channel.role }
           })
 
           // Here, we'll update our lobby with the discord details needed for later use.
@@ -137,35 +155,138 @@ const DiscordBot = () => {
 
           db
             .collection('discordEntities')
-            .add({ lobbyId: lobbyId, channels: channelDetails, permissionRoleId: role.id })
+            .doc(lobbyId)
+            .set({ lobbyId: lobbyId, channels: channelDetails, permissionRoleId: role.id })
         })
         .catch(console.error)
+    })
+
+    lobbyListener.on('lobbyStart', (lobby) => {
+      /* 
+        Lobby has ten players and status is 1. Time to move players into their correct channels. 
+
+        lobby = {
+          created_at: Timestamp { seconds: 1585919121, nanoseconds: 460000000 },
+          discord: {
+            channels: [
+              {
+                id: '695620898962800690',
+                name: 'PREMATCH LOBBY',
+                role: 'voice-lobby',
+                team: 0,
+                type: 'voice'
+              },
+              {
+                id: '695620900417962124',
+                name: 'TEAM HYPE',
+                role: 'voice-team',
+                team: 1,
+                type: 'voice'
+              },
+              {
+                id: '695620901332451378',
+                name: 'TEAM HAZARD',
+                role: 'voice-team',
+                team: 2,
+                type: 'voice'
+              },
+              {
+                id: '695620902456393739',
+                name: 'MATCH DETAILS',
+                role: 'text-lobby',
+                team: 0,
+                type: 'text'
+              }
+            ],
+            permissionRoleId: '695620012425085028'
+          },
+          players: [
+            { id: 842, source: 'web', username: 'PLAYER#337' },
+            { id: 854, source: 'web', username: 'PLAYER#828' },
+            { id: 600, source: 'web', username: 'PLAYER#514' },
+            {
+              avatar: null,
+              bot: false,
+              discriminator: '1053',
+              id: '11112222233333344444',
+              lastMessageChannelID: '695015685155192872',
+              lastMessageID: '695256234374463520',
+              source: 'discord',
+              username: 'Sentry'
+            }
+          ],
+          status: 1,
+          team1: [
+            { id: 600, source: 'web', username: 'PLAYER#514' },
+            { id: 150, source: 'web', username: 'PLAYER#405' },
+          ],
+          team2: [
+            { id: 944, source: 'web', username: 'PLAYER#738' },
+            { id: 361, source: 'web', username: 'PLAYER#596' }
+          ],
+          uid: 'YqaKNi1VZgTpUTjl6qkb'
+        }
+      */
+
+      // Iterate through each player and if their source is discord, add permissions and MOVE THEM.
+
+      console.log(chalk.greenBright('Giving Permissions & Moving Chaps'))
+
+      const givePermissions = async () => {
+        for (const player of lobby.players) {
+          if (player.source === 'discord') {
+            await guild.members.fetch(player.id).then((user) => {
+              user.roles.add(lobby.discord.permissionRoleId)
+            })
+          }
+        }
+      }
+
+      givePermissions()
     })
   })
 
   // !join
   bot.on('message', (msg) => {
-    if (msg.content === '!createChannel') {
-      lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
+    if (msg.content === '!join') {
+      //lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
       //TODO : Somehow get active lobby. Done but so hackily.. I hate async await
-      //   getActiveLobby().then((lobby) =>
-      //     addPlayerToLobby(lobby.uid, msg.author).then(({ err, success }) => {
-      //       if (success) {
-      //         console.log('success :', success)
-      //         msg.reply(`Added you to the queue, ${msg.author.username}`)
-      //         msg.channel.send(`${lobby.players.length + 1} / 10`)
-      //       } else {
-      //       }
-      //     })
-      //   )
+      getActiveLobby().then((lobby) => {
+        const userObj = { ...msg.author, source: 'discord' }
+        addPlayerToLobby(lobby.uid, userObj).then(({ err, success }) => {
+          if (success) {
+            msg.reply(`Added you to the queue, ${msg.author.username}`)
+            msg.channel.send(`${lobby.players.length + 1} / 10`)
+          } else {
+            console.log('err :', err)
+          }
+        })
+      })
     }
   })
 
   // !gg nukes the discord server. Only General chat remains.
   bot.on('message', (message) => {
     if (message.content === '!GG') {
+      const safeRoles = [ 'valoBOT', '@everyone', 'Dev Team' ]
+
       if (message.author.username === 'Sentry') {
-        console.log(chalk.bgBlackBright('DESTOYING DISCORD - WIPING ALL CHANNELS'))
+        console.log(chalk.bgBlackBright('DESTOYING DISCORD - WIPING ALL CHANNELS AND ROLES'))
+
+        message.guild.roles.cache.forEach((role) => {
+          console.log(
+            'role.name :',
+            role.name,
+            safeRoles.find((element) => {
+              console.log('element vs role:', element, role.name)
+
+              element === role.name
+            })
+          )
+
+          safeRoles.find((element) => element === role.name) === undefined && role.delete()
+        })
+
         message.guild.channels.cache.forEach((channel) => {
           channel.name !== 'general' && channel.delete()
         })

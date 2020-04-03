@@ -5,11 +5,11 @@ import 'babel-polyfill'
 
 // import "./app";
 
-import { LobbyManager } from './lobbyManager'
 import './discordBot'
+import LobbyManager from './lobbyManager'
 
-// Import like so. Is this the right place for it?
-LobbyManager() // Init first to get the snapshots running.
+LobbyManager().init()
+
 
 let port = process.env.PORT || 3000
 
