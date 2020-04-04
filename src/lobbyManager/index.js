@@ -2,6 +2,7 @@ import { initFirebase } from '../firebaseAuth.js'
 import { defaultLobby, createPlayer, shuffleTeams } from '../helpers/lobbyHelpers'
 import { EventEmitter } from 'events'
 import chalk from 'chalk'
+import { create } from 'domain'
 
 const db = initFirebase()
 
@@ -16,8 +17,6 @@ export const lobbyListener = new EventEmitter()
 export const LobbyManager = () => {
   // NOTE: Emmiters can live here, but not listeners? Loading LobbyManager in multiple places creates multiple listeners (that repeat their actions)
 
-  let activeLobby = null
-
   /* 
 
   When lobby manager initialises, we should..
@@ -28,24 +27,51 @@ export const LobbyManager = () => {
 
   */
 
+  let lobbyMode = 'MODERATED'
+  const modeTypes = [ 'AUTO_LOBBY', 'MODERATED' ]
+
   const init = async () => {
+    lobbyListener.on('setLobbyMode', async (mode) => {
+      if (modeTypes.find((type) => type === mode)) {
+        console.log(chalk.blueBright('Setting LobbyManager to', mode))
+        // When a lobby mode is switched, we should load its own config (and remove all the listeners associated with other modes)
+        switch (mode) {
+          case 'AUTO_LOBBY':
+            lobbyMode = mode
+            // if we dont have an active lobby, lets create a new one.
+            ;(await getActiveLobby()) === null && createLobby()
+            break
+          case 'MODERATED':
+            lobbyMode = mode
+
+          default:
+            break
+        }
+      } else {
+        console.log('Couldnt Set LobbyManager')
+      }
+    })
+
     console.log('INITIALISING')
     // Grab a snapshot of our current lobbies
     db.collection('lobbies').orderBy('created_at', 'desc').onSnapshot((snapshot) => {
       if (snapshot.size) {
         // let lobbyList = snapshot.docs.map((doc) => doc.data())
 
-        // If there are no active lobbies, create one.
-        snapshot.docs.map((doc) => doc.data()).filter((lobby) => lobby.status === 0).length === 0 && createLobby()
+        // If there are no active lobbies, create one. HOW CAN WE SET UP DIFFERENT 'MODES'? THIS SHOULDNT LIVE HERE..
+        if (lobbyMode === 'AUTO_LOBBY') {
+          snapshot.docs.map((doc) => doc.data()).filter((lobby) => lobby.status === 0).length === 0 && createLobby()
+        }
 
         // Listen for changes.
         snapshot.docChanges().forEach((change) => {
           lobbyListener.emit('lobbyChange', { change: change.type, data: { ...change.doc.data(), uid: change.doc.id } })
         })
       } else {
-        // it's empty so create our first lobby and set it as our active lobby.
-        console.log('No Lobbies Found - Creating New Lobby')
-        createLobby()
+        // No lobbies :(
+        if (lobbyMode === 'AUTO_LOBBY') {
+          createLobby()
+        }
       }
     })
 
@@ -89,15 +115,28 @@ export const LobbyManager = () => {
         })
         .then((response) => lobbyListener.emit('lobbyStart', response.data()))
     })
+
+    lobbyListener.on('createLobby', (msg) => {
+      createLobby().then(() =>
+        msg.reply('Pickup Lobby Live! Type !join to get started, and !remove to leave the queue.')
+      )
+    })
   }
 
   // Creates a lobby then returns the new lobby uid
-  const createLobby = () => {
-    db.collection('lobbies').add(defaultLobby).then((ref) => {
-      lobbyListener.emit('lobbyCreate', ref.id)
-      activeLobby = ref.id
-      db.collection('lobbies').doc(ref.id).update({ uid: ref.id })
-    })
+  const createLobby = async () => {
+    console.log(chalk.blueBright('CREATING NEW LOBBY..'))
+    await db
+      .collection('lobbies')
+      .add(defaultLobby)
+      .then(async (ref) => {
+        await db.collection('lobbies').doc(ref.id).update({ uid: ref.id, name: 'VALOVALORANT PICKUP' })
+        return ref
+      })
+      .then((ref) => {
+        lobbyListener.emit('lobbyCreate', ref)
+      })
+      .catch((e) => console.log(e))
   }
 
   // Grabs details on a lobby, taking a lobby uid as argument
@@ -146,23 +185,17 @@ export const LobbyManager = () => {
   }
 
   const getActiveLobby = async () => {
-    if (!activeLobby) {
-      try {
-        const snapshot = await db.collection('lobbies').orderBy('created_at', 'desc').get()
-        return snapshot.docs.map((doc) => doc.data())[0]
-      } catch (e) {
-        console.log(e)
-        throw e // let caller know the promise was rejected with this reason
-      }
-    } else {
-      return activeLobby
+    try {
+      const snapshot = await db.collection('lobbies').where('status', '==', 0).get()
+      return snapshot.docs.map((doc) => doc.data())[0] || null
+    } catch (e) {
+      console.log(e)
+      throw e // let caller know the promise was rejected with this reason
     }
   }
 
-  return { init, getActiveLobby, addPlayerToLobby, findPlayerInLobby, getLobbyData }
+  return { init, lobbyMode, getActiveLobby, addPlayerToLobby, findPlayerInLobby, getLobbyData }
 }
-
-// let activeLobby = getActiveLobby().then((result) => result)
 
 // addPlayerToLobby('WIeztTgnggQHwS1tFEJu', {
 //   avatar: null,

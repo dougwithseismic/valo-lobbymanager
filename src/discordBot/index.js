@@ -1,10 +1,11 @@
-import Discord from 'discord.js'
+import Discord, { GuildEmoji } from 'discord.js'
 import { LobbyManager, lobbyListener } from '../lobbyManager'
 import { initFirebase } from '../firebaseAuth.js'
+import { generateEmbedMessage } from '../helpers/lobbyHelpers'
 import chalk from 'chalk'
 
 const db = initFirebase()
-const { getActiveLobby, addPlayerToLobby } = LobbyManager()
+const { getActiveLobby, addPlayerToLobby, findPlayerInLobby } = LobbyManager()
 const { Client } = Discord
 
 /*
@@ -18,8 +19,9 @@ lobbyStart - After a lobby gets 10 players and teams as split: Here we give perm
 [ ] !leave - Remove a discord user from the queue
 [ ] think of a good way to do votes - typing is lame, can we do it in a more interactive way?
 
-!GG - Nukes the server for when it gets messy (requires you to be Sentry ;)
+!GG - Nukes the server for when it gets messy (requires you to be Sentry. Change name to acheive same effect;)
 
+// TODO: Refactor lobbyListener logic to be handled by like a reducer, with one function and multiple switches.
 */
 
 const DiscordBot = () => {
@@ -34,50 +36,59 @@ const DiscordBot = () => {
 
   bot.on('ready', () => {
     console.info(`Logged in as ${bot.user.tag}!`)
+
     lobbyListener.emit('botLoggedIn', bot.user) // In case we want to do something elsewhere. https://nodejs.org/api/events.html
 
-    // Lets grab our server objects so we can create channels etc
-    const guild = bot.guilds.cache.map((guild) => guild)[0]
+    // References the server our bot is in. If we're in multiple servers, we need to update this logic.
+    const guild = bot.guilds.cache.map((guild) => guild)[1]
+    //const guild = bot.guilds.cache.get('694639382891855993') Creating roles seems fucked on this server for some reason
 
     // Lobby Creator - Create channels / permissions and update Firebase lobby
-    lobbyListener.on('lobbyCreate', (lobbyId) => {
-      console.log(chalk.green('Creating Discord Lobby Actions for ', lobbyId))
+    lobbyListener.on('lobbyCreate', async (createdLobby) => {
+      /* 
+    
+    - CREATES UNIQUE ROLE TO ACCESS CHANNELS
+    - CREATES CATEGORY, TEXT AND VOICE CHANNELS
+    - UPDATES LOBBY OBJECT IN FIREBASE
+    
+    TODO: Clean up old lobbies (maybe the oldest, using created_at) so that we don't run into max. channel or max. permissions issues
+          - If #lobbies > 10? then get oldest lobby and.. 
+          - Change it to status 3, (status 2 can be for when the lobby is still 'alive'... Let's not delete it outright?)
+          - Delete permissions for that lobby (that should remove permissions from anyone we missed, too)
+          - Delete those channels
+    
+    */
+
+      // TODO: MESSAGE THE CHANNEL WITH UPDATES ON BOT BEHAVIOUR.
+
+      const lobby = await db.collection('lobbies').doc(createdLobby.id).get().then((doc) => doc.data())
+
+      console.log('lobby :', lobby)
+      console.log(chalk.green('Creating Discord Lobby Actions for', lobby.name))
 
       // Team 0 = everyone, team 1 = Team Hype, team 2 = Team Hazard
       const channels = [
         {
-          name: `PREMATCH LOBBY`,
-          role: 'voice-lobby',
-          type: 'voice',
-          team: 0,
-          permissions: [
-            { deny: [ 'CONNECT' ] },
-            {
-              allow: [ 'CONNECT', 'SPEAK' ]
-            }
-          ]
-        },
-        {
-          name: `TEAM HYPE`,
+          name: `TEAM ATTACKERS`,
           role: 'voice-team',
           team: 1,
           type: 'voice',
           permissions: [
-            { deny: [ 'CONNECT' ] },
+            { deny: [ 'VIEW_CHANNEL' ] },
             {
-              allow: [ 'CONNECT', 'SPEAK' ]
+              allow: [ 'VIEW_CHANNEL', 'CONNECT', 'SPEAK' ]
             }
           ]
         },
         {
-          name: `TEAM HAZARD`,
+          name: `TEAM DEFENDERS`,
           role: 'voice-team',
           team: 2,
           type: 'voice',
           permissions: [
-            { deny: [ 'CONNECT' ] },
+            { deny: [ 'VIEW_CHANNEL' ] },
             {
-              allow: [ 'CONNECT', 'SPEAK' ]
+              allow: [ 'VIEW_CHANNEL', 'CONNECT', 'SPEAK' ]
             }
           ]
         },
@@ -89,18 +100,16 @@ const DiscordBot = () => {
           permissions: [
             { deny: [ 'VIEW_CHANNEL' ] },
             {
-              allow: [ 'SEND_MESSAGES' ]
+              allow: [ 'VIEW_CHANNEL', 'SEND_MESSAGES' ]
             }
           ]
         }
       ]
 
-      // Create new role just for lobby, then create the categoryChannel, create text and voice channels (along with permissions), then add them to the category.
-
       guild.roles
         .create({
           data: {
-            name: `Pickup Group #${lobbyId}`,
+            name: `Pickup Group #${lobby.uid}`,
             color: 'BLUE'
           },
           reason: 'A Dynamic Pickup Group Role'
@@ -108,8 +117,12 @@ const DiscordBot = () => {
         .then(async (role) => {
           console.log('Role Created', role.id)
 
-          let category = await guild.channels.create(`${lobbyId} - LOBBY`, {
-            type: 'category'
+          let category = await guild.channels.create(`${lobby.name} - LOBBY`, {
+            type: 'category',
+            permissionOverwrites: [
+              { id: guild.id, deny: [ 'VIEW_CHANNEL' ] },
+              { id: role.id, allow: [ 'VIEW_CHANNEL' ] }
+            ]
           })
           return { role, category }
         })
@@ -150,101 +163,72 @@ const DiscordBot = () => {
           // Here, we'll update our lobby with the discord details needed for later use.
           db
             .collection('lobbies')
-            .doc(lobbyId)
+            .doc(lobby.uid)
             .update({ discord: { channels: channelDetails, permissionRoleId: role.id } })
 
           db
             .collection('discordEntities')
-            .doc(lobbyId)
-            .set({ lobbyId: lobbyId, channels: channelDetails, permissionRoleId: role.id })
+            .doc(lobby.uid)
+            .set({ lobbyId: lobby.uid, channels: channelDetails, permissionRoleId: role.id })
         })
-        .catch(console.error)
+        .then(() => console.log(chalk.green('LE FIN for', lobby.id)))
+
+      // Create new role just for lobby, then create the categoryChannel, create text and voice channels (along with permissions), then add them to the category.
     })
 
+    // Lobby Starter - Gives permissions to players so they can see / interact with lobby and notifies players of next actions.
     lobbyListener.on('lobbyStart', (lobby) => {
       /* 
-        Lobby has ten players and status is 1. Time to move players into their correct channels. 
+    
+    - ADDS PERMISSIONS TO SEE DISCORD CHANNELS
+    - MESSAGES CORRESPONDING MATCH LOBBY CHANNEL WITH TEAM DETAILS - NAME, CAPTAIN (EVERYONE SHOULD ADD CAPTAIN TO FRIENDS OR SMT.)
+    - DMs INDIVIDUAL PLAYERS WITH THEIR DETAILS
 
-        lobby = {
-          created_at: Timestamp { seconds: 1585919121, nanoseconds: 460000000 },
-          discord: {
-            channels: [
-              {
-                id: '695620898962800690',
-                name: 'PREMATCH LOBBY',
-                role: 'voice-lobby',
-                team: 0,
-                type: 'voice'
-              },
-              {
-                id: '695620900417962124',
-                name: 'TEAM HYPE',
-                role: 'voice-team',
-                team: 1,
-                type: 'voice'
-              },
-              {
-                id: '695620901332451378',
-                name: 'TEAM HAZARD',
-                role: 'voice-team',
-                team: 2,
-                type: 'voice'
-              },
-              {
-                id: '695620902456393739',
-                name: 'MATCH DETAILS',
-                role: 'text-lobby',
-                team: 0,
-                type: 'text'
-              }
-            ],
-            permissionRoleId: '695620012425085028'
-          },
-          players: [
-            { id: 842, source: 'web', username: 'PLAYER#337' },
-            { id: 854, source: 'web', username: 'PLAYER#828' },
-            { id: 600, source: 'web', username: 'PLAYER#514' },
-            {
-              avatar: null,
-              bot: false,
-              discriminator: '1053',
-              id: '11112222233333344444',
-              lastMessageChannelID: '695015685155192872',
-              lastMessageID: '695256234374463520',
-              source: 'discord',
-              username: 'Sentry'
-            }
-          ],
-          status: 1,
-          team1: [
-            { id: 600, source: 'web', username: 'PLAYER#514' },
-            { id: 150, source: 'web', username: 'PLAYER#405' },
-          ],
-          team2: [
-            { id: 944, source: 'web', username: 'PLAYER#738' },
-            { id: 361, source: 'web', username: 'PLAYER#596' }
-          ],
-          uid: 'YqaKNi1VZgTpUTjl6qkb'
-        }
-      */
+    
+    */
 
       // Iterate through each player and if their source is discord, add permissions and MOVE THEM.
 
-      console.log(chalk.greenBright('Giving Permissions & Moving Chaps'))
-
       const givePermissions = async () => {
+        console.log(chalk.greenBright('Giving Permissions & Messaging Chaps'))
+
         for (const player of lobby.players) {
           if (player.source === 'discord') {
             await guild.members.fetch(player.id).then((user) => {
+              user.roles
               user.roles.add(lobby.discord.permissionRoleId)
             })
           }
         }
       }
 
-      givePermissions()
+      givePermissions().then(() => {
+        const lobbyChannel = lobby.discord.channels.find((channel) => channel.role === 'text-lobby')
+        const voiceChannel = lobby.discord.channels.find((channel) => channel.role === 'voice-lobby')
+
+        const messageEmbeds = generateEmbedMessage(lobby.team1, lobby.team2)
+
+        messageEmbeds.map((embed) => {
+          guild.channels.cache.get(lobbyChannel.id).send({ embed })
+        })
+      })
     })
   })
+
+  //!setmode *
+  bot.on('message', (msg) => {
+    if (msg.content.includes('!setmode')) {
+      const newMode = msg.content.substr(msg.content.indexOf(' ') + 1)
+      lobbyListener.emit('setLobbyMode', newMode)
+    }
+  })
+
+    //!startpug
+    bot.on('message', (msg) => {
+      if (msg.content.includes('!startpug')) {
+        lobbyListener.emit('createLobby',msg)
+      }
+    })
 
   // !join
   bot.on('message', (msg) => {
@@ -252,15 +236,40 @@ const DiscordBot = () => {
       //lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
       //TODO : Somehow get active lobby. Done but so hackily.. I hate async await
       getActiveLobby().then((lobby) => {
-        const userObj = { ...msg.author, source: 'discord' }
-        addPlayerToLobby(lobby.uid, userObj).then(({ err, success }) => {
-          if (success) {
-            msg.reply(`Added you to the queue, ${msg.author.username}`)
-            msg.channel.send(`${lobby.players.length + 1} / 10`)
-          } else {
-            console.log('err :', err)
-          }
-        })
+        if (lobby) {
+          const userObj = { ...msg.author, source: 'discord' }
+          addPlayerToLobby(lobby.uid, userObj)
+            .then(({ success }) => {
+              if (success) {
+                msg.reply(
+                  `Added you to the queue, ${msg.author.username} - Current Lobby: ${lobby.players.length + 1} / 10`
+                )
+              }
+            })
+            .catch((e) => console.log('e :', e))
+        } else {
+          console.log('No Lobby Active - Maybe the game mode is MODERATED?')
+        }
+      })
+    }
+  })
+
+  // !remove
+  bot.on('message', (msg) => {
+    if (msg.content === '!remove') {
+      //lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
+      //TODO : Somehow get active lobby. Done but so hackily.. I hate async await
+      getActiveLobby().then((lobby) => {
+        if (lobby) {
+          const updatedPlayerList = lobby.players.filter((player) => player.id !== msg.author.id)
+
+          findPlayerInLobby(lobby.uid, msg.author.id) &&
+            db.collection('lobbies').doc(lobby.uid).update({ players: updatedPlayerList }).then(() => {
+              console.log('Player Removed', msg.author.username)
+            })
+        } else {
+          console.log('Couldnt remove player - Perhaps they arent in the active lobby')
+        }
       })
     }
   })
