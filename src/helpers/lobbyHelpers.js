@@ -91,7 +91,7 @@ const generateEmbedMessage = (team1, team2) => {
 
   const message2 = {
     title: 'Team DEFENDERS',
-    description: `Send your team Captain, ${getTeamTags(team2)[0]} a friend request and join the match. ${getTeamTags(
+    description: `Send your team Captain, ${getTeamTags(team2)[0]} a friend request on VALORANT and join the match. ${getTeamTags(
       team2
     )[0]}, as your teams captain, add the opposing team's captain on VALORANT and arrange a custom lobby set to **OPEN**.`,
     color: 31487,

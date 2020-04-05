@@ -48,8 +48,7 @@ const DiscordBot = () => {
     const guild = bot.guilds.cache.get('633990756649926656')
 
     // Home Serve
-    //const guild = bot.guilds.cache.get('695962481277009971')
-
+    // const guild = bot.guilds.cache.get('695962481277009971')
     //const guild = bot.guilds.cache.get('694639382891855993') Creating roles seems fucked on this server for some reason
 
     // Lobby Creator - Create channels / permissions and update Firebase lobby
@@ -163,8 +162,8 @@ const DiscordBot = () => {
                 .then(async (response) => {
                   channelArray.push({ id: response.id, ...channel })
 
-                  response.setParent('695989724032008262')
-                  // response.setParent(category.id)
+                  response.setParent('695989724032008262') // for VALORANTPRO parent
+                 //  response.setParent(category.id)
                 })
             }
             return channelArray
@@ -206,10 +205,10 @@ const DiscordBot = () => {
 
     
     */
+      const lobbyChannel = lobby.discord.channels.find((channel) => channel.role === 'text-lobby')
 
       // Iterate through each player and if their source is discord, add permissions and MOVE THEM.
 
-      console.log('lobby :', lobby)
       const givePermissions = async () => {
         console.log(chalk.greenBright('Giving Permissions & Messaging Chaps'))
 
@@ -222,7 +221,6 @@ const DiscordBot = () => {
                 return user
               })
               .then((user) => {
-                const lobbyChannel = lobby.discord.channels.find((channel) => channel.role === 'text-lobby')
                 user.send(
                   `**VALORANT MIX READY!** - Check <#${lobbyChannel.id}> for teams and details on joining up. *GLHF*`
                 )
@@ -231,12 +229,23 @@ const DiscordBot = () => {
         }
       }
 
-      givePermissions().then(() => {
-        const lobbyChannel = lobby.discord.channels.find((channel) => channel.role === 'text-lobby')
+      givePermissions().then(async () => {
         const messageEmbeds = generateEmbedMessage(lobby.team1, lobby.team2)
 
-        // Send to each player.
+        const lobbyGroup = await db
+          .collection('lobbyGroups')
+          .doc(lobby.lobbyGroupId)
+          .get()
+          .then((snapshot) => snapshot.data())
 
+        // Game starting Lobby Message
+        guild.channels.cache
+          .get(lobbyGroup.discord.channelId)
+          .send(`**Lobby Full 10/10** - **GAME STARTING!** - Players, check your DMs for details!`)
+
+        // ${lobby.players.map((player) => `<@!${player.id}>`).join(', ')}
+
+        // Send to each player.
         messageEmbeds.map((embed) => {
           guild.channels.cache.get(lobbyChannel.id).send({ embed })
         })
@@ -291,7 +300,7 @@ const DiscordBot = () => {
 
   // CHAT COMMAND : !startmix
   bot.on('message', (msg) => {
-    if (msg.content === '!startmix') {
+    if (msg.author.username === 'Sentry' && msg.content === '!startmix') {
       lobbyListener.emit('createLobby', msg)
     }
   })
@@ -311,7 +320,8 @@ const DiscordBot = () => {
             .then(({ success }) => {
               if (success) {
                 msg.reply(
-                  `Added you to the queue, ${msg.author.username} - Current Lobby: ${lobby.players.length + 1} / 10 - Waiting on ${10 - (lobby.players.length + 1)} more.`
+                  `Added you to the queue, ${msg.author.username} - Current Lobby: ${lobby.players.length +
+                    1} / 10 - Waiting on ${10 - (lobby.players.length + 1)} more.`
                 )
               }
             })
