@@ -11,7 +11,7 @@ import LobbyManager from './lobbyManager'
 LobbyManager().init()
 
 
-let port = process.env.PORT || 3000
+let port = process.env.PORT || 3001
 
 const app = express()
 
@@ -31,4 +31,4 @@ app.get('/stream', (req, res) => {
 
 app.post('/transactions', async (req, res) => {})
 
-app.listen(port, () => console.log(`Server Live on port ${process.env.PORT}! 🚀`))
+app.listen(port, () => {})

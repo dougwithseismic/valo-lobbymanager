@@ -8,12 +8,20 @@ const examplePlayer = {
   source: 'discord',
   username: 'Sentry'
 }
+
+const defaultLobbyGroup = {
+  createdAt: new Date(),
+  name: 'Default Lobby Group',
+  ruleset: { lobbySize: 10, type: 'moderated', mode: 'blind' },
+  discord: { guildId: '695962481277009971', channelId: '696024559312437309' }
+}
+
 const defaultLobby = {
   players: [],
   team1: [],
   team2: [],
   status: 0,
-  created_at: new Date(),
+  createdAt: new Date(),
   creator: null
 }
 
@@ -67,7 +75,7 @@ const generateEmbedMessage = (team1, team2) => {
       team1
     )[0]} a friend request on VALORANT and join the match. ${getTeamTags(
       team1
-    )[0]}, as your teams captain, add the opposing team's captain on VALORANT and arrange a custom lobby.`,
+    )[0]}, as your teams captain, add the opposing team's captain on VALORANT and arrange a custom lobby set to **OPEN**.`,
     color: 16711680,
     fields: [
       {
@@ -85,7 +93,7 @@ const generateEmbedMessage = (team1, team2) => {
     title: 'Team DEFENDERS',
     description: `Send your team Captain, ${getTeamTags(team2)[0]} a friend request and join the match. ${getTeamTags(
       team2
-    )[0]}, as your teams captain, add the opposing team's captain on VALORANT and arrange a custom lobby.`,
+    )[0]}, as your teams captain, add the opposing team's captain on VALORANT and arrange a custom lobby set to **OPEN**.`,
     color: 31487,
     fields: [
       {
@@ -100,10 +108,10 @@ const generateEmbedMessage = (team1, team2) => {
   }
 
   const message3 = {
-    description: '**!!!** IF YOUR DISCORD NAME IS DIFFERENT TO YOUR RIOT ID, TYPE YOUR RIOT ID IN LOBBY NOW *!!!*'
+    description: '**In VALORANT you can join custom lobbies only through friend list. Please, type your RIOT#ID in this channel so that you can add each other in game**'
   }
 
-  return [ message1, message2, message3 ]
+  return [ message3, message1, message2  ]
 }
 
-export { examplePlayer, defaultLobby, createPlayer, shuffleTeams, generateEmbedMessage }
+export { examplePlayer, defaultLobby, defaultLobbyGroup, createPlayer, shuffleTeams, generateEmbedMessage }
