@@ -28,6 +28,7 @@ lobbyStart - After a lobby gets 10 players and teams as split: Here we give perm
 
 const DiscordBot = () => {
   const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
+  const GUILD_ID = process.env.DISCORD_GUILD
   console.log('DISCORD_BOT_TOKEN :', BOT_TOKEN)
 
   const bot = new Client()
@@ -38,7 +39,8 @@ const DiscordBot = () => {
 
     lobbyListener.emit('botLoggedIn', bot.user) // Event Emitters - Callbacks, anywhere.. https://nodejs.org/api/events.html
 
-    const guild = bot.guilds.cache.get('695962481277009971') // THIS ONE IS BROKEN?!
+    // main 695962481277009971
+    const guild = bot.guilds.cache.get(GUILD_ID) // THIS ONE IS BROKEN?!
     // const guild = bot.guilds.cache.get('696685308271525918')
 
     // Lobby Creator - Create channels / permissions and update Firebase lobby
