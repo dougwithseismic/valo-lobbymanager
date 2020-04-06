@@ -260,7 +260,6 @@ const DiscordBot = () => {
       let newTime = new Date(timestamp.setHours(timestamp.getHours() + 1))
 
       const getLobby = await db.collection('lobbies').doc(lobbyRef.id).get().then((doc) => doc.data())
-      
 
       const lobbyToCheckArray = await db
         .collection('lobbies')
@@ -280,9 +279,22 @@ const DiscordBot = () => {
       console.log('filtered', filtered)
 
       for (const lobby of filtered) {
-        db.collection('lobbies').doc(lobby.uid).delete().then(() => {
-          console.log(`Lobby Deleted`)
-        })
+        // Right now we're deleting but we should really be checking to see if the voice channels are empty first. If they are, go deleting
+        const voiceChannels = lobby.discord.channels.filter((channel) => channel.role == 'voice-team')
+
+        let hasPlayersInVoice = false
+
+        // Checks for players in voice.
+        for (const channel of voiceChannels) {
+          hasPlayersInVoice = bot.channels.cache.get(channel.id).members.size > 0 ? true : false
+        }
+
+        // If none, nuke it.
+        if (!hasPlayersInVoice) {
+          db.collection('lobbies').doc(lobby.uid).delete().then(() => {
+            console.log(`Lobby Deleted`)
+          })
+        }
       }
 
       // Use discord to check whether those channels are empty - Because our server moves users to afk channel after 30 minutes, we can assume that lobby is dead (or not using!) if there are no players in chat. Maybe.
