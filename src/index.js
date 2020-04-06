@@ -1,5 +1,5 @@
 import 'dotenv/config'
-import express, { response } from 'express'
+import express from 'express'
 import cors from 'cors'
 import 'babel-polyfill'
 
@@ -19,16 +19,15 @@ app.use(cors())
 app.use(express.urlencoded({ extended: true }))
 
 app.get('/stream', (req, res) => {
-  res.status(200).set({
-    connection: 'keep-alive',
-    'cache-control': 'no-cache',
-    'content-type': 'application/json'
-  })
-  setInterval(() => {
-    res.write(JSON.stringify({ status: 'start lobby' }))
-  }, 5000)
+  // res.status(200).set({
+  //   connection: 'keep-alive',
+  //   'cache-control': 'no-cache',
+  //   'content-type': 'application/json'
+  // })
+  // setInterval(() => {
+  //   res.write(JSON.stringify({ status: 'start lobby' }))
+  // }, 5000)
 })
 
-app.post('/transactions', async (req, res) => {})
 
 app.listen(port, () => {})
