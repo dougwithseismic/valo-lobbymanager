@@ -38,8 +38,8 @@ const DiscordBot = () => {
 
     lobbyListener.emit('botLoggedIn', bot.user) // Event Emitters - Callbacks, anywhere.. https://nodejs.org/api/events.html
 
-    // const guild = bot.guilds.cache.get('695962481277009971') // THIS ONE IS BROKEN?!
-    const guild = bot.guilds.cache.get('696685308271525918')
+    const guild = bot.guilds.cache.get('695962481277009971') // THIS ONE IS BROKEN?!
+    // const guild = bot.guilds.cache.get('696685308271525918')
 
     // Lobby Creator - Create channels / permissions and update Firebase lobby
     lobbyListener.on('lobbyCreate', async (createdLobby) => {
@@ -256,8 +256,6 @@ const DiscordBot = () => {
     lobbyListener.on('removeOldLobbies', async (lobbyRef) => {
       console.log(chalk.blueBright('Checking for old lobbies to clean'))
       // Loop through started lobbies (status 1) that are older than one hour..
-      let timestamp = new Date()
-      let newTime = new Date(timestamp.setHours(timestamp.getHours() + 1))
 
       const getLobby = await db.collection('lobbies').doc(lobbyRef.id).get().then((doc) => doc.data())
 
@@ -273,7 +271,16 @@ const DiscordBot = () => {
       console.log('lobbyToCheckArray :', lobbyToCheckArray)
 
       const filtered = lobbyToCheckArray.filter((lobby) => {
-        return lobby.createdAt < newTime
+        const timeNow = new Date()
+        console.log('timeNow :', timeNow)
+        console.log('lobby.createdAt :', lobby.createdAt)
+
+        const createdTime = lobby.createdAt.toDate()
+        console.log('createdTime :', createdTime)
+        let checkTime = new Date(createdTime.setHours(createdTime.getHours() + 1))
+        console.log('checkTime :', checkTime)
+
+        return timeNow > checkTime
       })
 
       console.log('filtered', filtered)
@@ -341,7 +348,7 @@ const DiscordBot = () => {
 
   // CHAT COMMAND : !setup <name> <mode>
   bot.on('message', (msg) => {
-    if (msg.content.includes('!setup')) {
+    if (msg.author.username === 'Sentry' && msg.content.includes('!setup')) {
       lobbyListener.emit('setupLobbyGroup', msg)
     }
   })
@@ -413,7 +420,6 @@ const DiscordBot = () => {
       })
     }
   })
-
   // CHAT COMMAND : !stopmix
   bot.on('message', (msg) => {
     if (msg.content === '!stopmix') {
@@ -431,33 +437,33 @@ const DiscordBot = () => {
   })
 
   // CHAT COMMAND : !GG nukes the discord server. Only General chat remains.
-  bot.on('message', (message) => {
-    if (message.content === '!GG') {
-      const safeRoles = [ 'valoBOT', '@everyone', 'Dev Team' ]
+  // bot.on('message', (message) => {
+  //   if (message.content === '!GG') {
+  //     const safeRoles = [ 'valoBOT', '@everyone', 'Dev Team' ]
 
-      if (message.author.username === 'Sentry') {
-        console.log(chalk.bgBlackBright('DESTOYING DISCORD - WIPING ALL CHANNELS AND ROLES'))
+  //     if (message.author.username === 'Sentry') {
+  //       console.log(chalk.bgBlackBright('DESTOYING DISCORD - WIPING ALL CHANNELS AND ROLES'))
 
-        message.guild.roles.cache.forEach((role) => {
-          console.log(
-            'role.name :',
-            role.name,
-            safeRoles.find((element) => {
-              console.log('element vs role:', element, role.name)
+  //       message.guild.roles.cache.forEach((role) => {
+  //         console.log(
+  //           'role.name :',
+  //           role.name,
+  //           safeRoles.find((element) => {
+  //             console.log('element vs role:', element, role.name)
 
-              element === role.name
-            })
-          )
+  //             element === role.name
+  //           })
+  //         )
 
-          safeRoles.find((element) => element === role.name) === undefined && role.delete()
-        })
+  //         safeRoles.find((element) => element === role.name) === undefined && role.delete()
+  //       })
 
-        message.guild.channels.cache.forEach((channel) => {
-          channel.name !== 'general' && channel.delete()
-        })
-      }
-    }
-  })
+  //       message.guild.channels.cache.forEach((channel) => {
+  //         channel.name !== 'general' && channel.delete()
+  //       })
+  //     }
+  //   }
+  // })
 
   return {}
 }
