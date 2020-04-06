@@ -62,15 +62,14 @@ const generateEmbedMessage = (team1, team2) => {
       return `<@!${team[0].id}>`
     }
 
-    const teamMinusCaptain = team.filter((player, i) => i !== 0)
+    // If we ever want 1v1s, we'll need to handle logic where the team captain IS the team. So this logic is needed.
+    const teamMinusCaptain = team.filter((_, i) => i !== 0)
     return teamMinusCaptain.length > 1 ? getTeamTags(teamMinusCaptain).join(', ') : getTeamTags(teamMinusCaptain)
     return
   }
 
-  // If there are only two players (one team in each)
-
   const message1 = {
-    title: 'Team ATTACKERS',
+    title: 'Team HYPE',
     description: `Send your team Captain, ${getTeamTags(
       team1
     )[0]} a friend request on VALORANT and join the match. ${getTeamTags(
@@ -90,8 +89,10 @@ const generateEmbedMessage = (team1, team2) => {
   }
 
   const message2 = {
-    title: 'Team DEFENDERS',
-    description: `Send your team Captain, ${getTeamTags(team2)[0]} a friend request on VALORANT and join the match. ${getTeamTags(
+    title: 'Team HAZARD',
+    description: `Send your team Captain, ${getTeamTags(
+      team2
+    )[0]} a friend request on VALORANT and join the match. ${getTeamTags(
       team2
     )[0]}, as your teams captain, add the opposing team's captain on VALORANT and arrange a custom lobby set to **OPEN**.`,
     color: 31487,
@@ -108,10 +109,11 @@ const generateEmbedMessage = (team1, team2) => {
   }
 
   const message3 = {
-    description: '**In VALORANT you can join custom lobbies only through friend list. Please, type your RIOT#ID in this channel so that you can add each other in game**'
+    description:
+      '**In VALORANT you can join custom lobbies only through friend list. Please, type your RIOT#ID in this channel so that you can add each other in game**'
   }
 
-  return [ message3, message1, message2  ]
+  return [ message3, message1, message2 ]
 }
 
 export { examplePlayer, defaultLobby, defaultLobbyGroup, createPlayer, shuffleTeams, generateEmbedMessage }

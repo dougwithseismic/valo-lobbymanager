@@ -11,7 +11,7 @@ import LobbyManager from './lobbyManager'
 LobbyManager().init()
 
 
-let port = process.env.PORT || 3001
+let port = process.env.PORT || 3000
 
 const app = express()
 

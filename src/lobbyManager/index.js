@@ -2,21 +2,16 @@ import { initFirebase } from '../firebaseAuth.js'
 import { defaultLobby, createPlayer, shuffleTeams, defaultLobbyGroup } from '../helpers/lobbyHelpers'
 import { EventEmitter } from 'events'
 import chalk from 'chalk'
-import { create } from 'domain'
 
 const db = initFirebase()
 
 export const lobbyListener = new EventEmitter()
 
 // MAIN HOOK
-// MAIN HOOK
-// MAIN HOOK
-// MAIN HOOK
-// MAIN HOOK
 
 export const LobbyManager = () => {
-  let lobbyMode = 'MODERATED'
-  const modeTypes = [ 'AUTO_LOBBY', 'MODERATED' ]
+  let lobbyMode = 'auto'
+  const modeTypes = [ 'auto', 'moderated' ]
 
   const init = async () => {
     console.log(chalk.bgBlack('##### Running Initial LobbyManager Setup #####'))
@@ -38,17 +33,18 @@ export const LobbyManager = () => {
       return lobbyGroupContainer
     })
 
-    lobbyListener.on('setLobbyMode', async (mode) => {
+    lobbyListener.on('setLobbyMode', async (mode, msg) => {
       if (modeTypes.find((type) => type === mode)) {
         console.log(chalk.blueBright('Setting LobbyManager to', mode))
         // When a lobby mode is switched, we should load its own config (and remove all the listeners associated with other modes)
         switch (mode) {
-          case 'AUTO_LOBBY':
+          case 'auto':
             lobbyMode = mode
             // if we dont have an active lobby, lets create a new one.
-            ;(await getActiveLobby()) === null && createLobby()
+            const activeLob = await getActiveLobby(msg.channel.id)
+            !activeLob && lobbyListener.emit('createLobby', msg)
             break
-          case 'MODERATED':
+          case 'moderated':
             lobbyMode = mode
 
           default:
@@ -59,7 +55,6 @@ export const LobbyManager = () => {
       }
     })
 
-    // When user in discord uses !setup command
     lobbyListener.on('setupLobbyGroup', async (message) => {
       db
         .collection('lobbyGroups')
@@ -81,15 +76,8 @@ export const LobbyManager = () => {
       if (snapshot.size) {
         // let lobbyList = snapshot.docs.map((doc) => doc.data())
         // If there are no active lobbies, create one. HOW CAN WE SET UP DIFFERENT 'MODES'? THIS SHOULDNT LIVE HERE..
-
-        if (lobbyMode === 'AUTO_LOBBY') {
-          snapshot.docs.map((doc) => doc.data()).filter((lobby) => lobby.status === 0).length === 0 && createLobby()
-        }
       } else {
         // No lobbies :( create one!
-        if (lobbyMode === 'AUTO_LOBBY') {
-          createLobby()
-        }
       }
     })
 
@@ -106,7 +94,7 @@ export const LobbyManager = () => {
         lobbyListener.emit('cleanRemovedLobby', data)
       }
 
-      // When a lobby is added, lets delete old, unused lobbies by looking at the createdAt timestamp.  
+      // When a lobby is added, lets delete old, unused lobbies by looking at the createdAt timestamp.
     })
 
     lobbyListener.on('lobbyFull', async (lobby) => {
@@ -156,8 +144,12 @@ export const LobbyManager = () => {
       console.log('options :', options)
 
       createLobby(options).then(() =>
-      
-        msg.reply(`<#${msg.channel.id}> Pickup Lobby Live! Type !join to get started, and !leave to leave the queue. If no players gathered in 10 minutes lobby will self delete.`)
+        lobbyListener.emit(
+          'sendMessage',
+          msg,
+          `<#${msg.channel
+            .id}> Pickup Lobby Live! Type !join to get started, and !leave to leave the queue. If no players gathered in 10 minutes lobby will self delete.`
+        )
       )
     })
 

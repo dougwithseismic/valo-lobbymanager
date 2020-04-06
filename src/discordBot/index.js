@@ -1,11 +1,13 @@
-import Discord, { GuildEmoji } from 'discord.js'
+import Discord from 'discord.js'
 import { LobbyManager, lobbyListener } from '../lobbyManager'
 import { initFirebase } from '../firebaseAuth.js'
 import { generateEmbedMessage } from '../helpers/lobbyHelpers'
 import chalk from 'chalk'
 
+require('dotenv').config()
+
 const db = initFirebase()
-const { getActiveLobby, addPlayerToLobby, findPlayerInLobby, findPlayer } = LobbyManager()
+const { getActiveLobby, addPlayerToLobby, findPlayerInLobby, findPlayer, lobbyMode } = LobbyManager()
 const { Client } = Discord
 
 /*
@@ -26,30 +28,15 @@ lobbyStart - After a lobby gets 10 players and teams as split: Here we give perm
 
 const DiscordBot = () => {
   const bot = new Client()
-  bot.login('Njk1MDEyMzA0NjgwNTE3NjUy.XomblQ.MYqSPCddbJyfqyIwd_lpEp4gHQQ')
-
-  // we should have an init(config) that manages multiple groups of lobbies.
-
-  // db.collection('lobbyGroups').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
-  //   if (snapshot.size) {
-  //     // snapshot.docs.map((doc) => console.log('doc.data() :', doc.data()))
-  //   }
-  // })
+  bot.login(process.env.DISCORD_BOT_TOKEN)
 
   bot.on('ready', async () => {
     console.info(`Logged in as ${bot.user.tag}!`)
 
-    lobbyListener.emit('botLoggedIn', bot.user) // In case we want to do something elsewhere. https://nodejs.org/api/events.html
+    lobbyListener.emit('botLoggedIn', bot.user) // Event Emitters - Callbacks, anywhere.. https://nodejs.org/api/events.html
 
-    // References the server our bot is in. If we're in multiple servers, we need to update this logic.
-    // const guild = bot.guilds.cache.map((guild) => guild)[0]
 
-    //VALORANTPRO
-    const guild = bot.guilds.cache.get('633990756649926656')
-
-    // Home Serve
-    // const guild = bot.guilds.cache.get('695962481277009971')
-    //const guild = bot.guilds.cache.get('694639382891855993') Creating roles seems fucked on this server for some reason
+    const guild = bot.guilds.cache.get('695962481277009971')
 
     // Lobby Creator - Create channels / permissions and update Firebase lobby
     lobbyListener.on('lobbyCreate', async (createdLobby) => {
@@ -67,21 +54,17 @@ const DiscordBot = () => {
     
     */
 
-      // TODO: MESSAGE THE CHANNEL WITH UPDATES ON BOT BEHAVIOUR.
-
       const lobby = await db.collection('lobbies').doc(createdLobby.id).get().then((doc) => doc.data())
-      console.log('lobby :', lobby)
-
       const lobbyGroup = await db.collection('lobbyGroups').doc(lobby.lobbyGroupId).get().then((doc) => doc.data())
-      console.log('lobbyGroup :', lobbyGroup)
+
       const guild = bot.guilds.cache.get(lobbyGroup.discord.guildId)
 
       console.log(chalk.green('Creating Discord Lobby Actions for', lobby.name))
 
-      // Team 0 = everyone, team 1 = Team Hype, team 2 = Team Hazard
+      // Team 0 = everyone, team 1 = Team Attackers, team 2 = Team Hazard
       const channels = [
         {
-          name: `TEAM ATTACKERS`,
+          name: `TEAM HYPE`,
           role: 'voice-team',
           team: 1,
           type: 'voice',
@@ -93,7 +76,7 @@ const DiscordBot = () => {
           ]
         },
         {
-          name: `TEAM DEFENDERS`,
+          name: `TEAM HAZARD`,
           role: 'voice-team',
           team: 2,
           type: 'voice',
@@ -129,16 +112,16 @@ const DiscordBot = () => {
         .then(async (role) => {
           console.log('Role Created', role.id)
 
-          // let category = await guild.channels.create(`${lobby.name} - LOBBY`, {
-          //   type: 'category',
-          //   permissionOverwrites: [
-          //     { id: guild.id, deny: [ 'VIEW_CHANNEL' ] },
-          //     { id: role.id, allow: [ 'VIEW_CHANNEL' ] }
-          //   ]
-          // })
+          let category = await guild.channels.create(`${lobby.name} - LOBBY`, {
+            type: 'category',
+            permissionOverwrites: [
+              { id: guild.id, deny: [ 'VIEW_CHANNEL' ] },
+              { id: role.id, allow: [ 'VIEW_CHANNEL' ] }
+            ]
+          })
 
           // DELETE THIS NORMALLY. THIS STOPS CATEGORY CREATE
-          let category = []
+          // let category = []
           return { role, category }
         })
         .then(async ({ role, category }) => {
@@ -147,7 +130,7 @@ const DiscordBot = () => {
           let channelCreation = async () => {
             let channelArray = []
 
-            // channelArray.push({ id: category.id, name: category.name, team: 0, type: category.type, role: 'category' })
+            channelArray.push({ id: category.id, name: category.name, team: 0, type: category.type, role: 'category' })
 
             for (const channel of channels) {
               console.log('Child Channel Created', channel.name)
@@ -162,8 +145,8 @@ const DiscordBot = () => {
                 .then(async (response) => {
                   channelArray.push({ id: response.id, ...channel })
 
-                  response.setParent('695989724032008262') // for VALORANTPRO parent
-                 //  response.setParent(category.id)
+                  //response.setParent('695989724032008262') // for VALORANTPRO parent
+                  response.setParent(category.id)
                 })
             }
             return channelArray
@@ -191,11 +174,20 @@ const DiscordBot = () => {
             .set({ lobbyId: lobby.uid, channels: channelDetails, permissionRoleId: role.id })
         })
         .then(() => console.log(chalk.green('LE FIN for', lobby.uid)))
-
-      // Create new role just for lobby, then create the categoryChannel, create text and voice channels (along with permissions), then add them to the category.
     })
 
-    // Lobby Starter - Gives permissions to players so they can see / interact with lobby and notifies players of next actions.
+    lobbyListener.on('sendMessage', async (discordMessage, message) => {
+      const lobbyGroup = await db
+        .collection('lobbyGroups')
+        .where('discord.channelId', '==', discordMessage.channel.id)
+        .get()
+        .then((ref) => ref.docs.map((doc) => doc.data()))
+
+      const guild = await bot.guilds.cache.get(lobbyGroup[0].discord.guildId)
+
+      guild.channels.cache.get(lobbyGroup[0].discord.channelId).send(message)
+    })
+
     lobbyListener.on('lobbyStart', (lobby) => {
       /* 
     
@@ -242,6 +234,12 @@ const DiscordBot = () => {
         guild.channels.cache
           .get(lobbyGroup.discord.channelId)
           .send(`**Lobby Full 10/10** - **GAME STARTING!** - Players, check your DMs for details!`)
+
+        lobbyMode === 'auto' &&
+          lobbyListener.emit('createLobby', {
+            guild: { id: lobbyGroup.discord.guildId },
+            channel: { id: lobbyGroup.discord.channelId }
+          })
 
         // ${lobby.players.map((player) => `<@!${player.id}>`).join(', ')}
 
@@ -294,13 +292,13 @@ const DiscordBot = () => {
   bot.on('message', (msg) => {
     if (msg.content.includes('!setmode')) {
       const newMode = msg.content.substr(msg.content.indexOf(' ') + 1)
-      lobbyListener.emit('setLobbyMode', newMode)
+      lobbyListener.emit('setLobbyMode', newMode, msg)
     }
   })
 
   // CHAT COMMAND : !startmix
   bot.on('message', (msg) => {
-    if (msg.author.username === 'Sentry' && msg.content === '!startmix') {
+    if (msg.content === '!startmix') {
       lobbyListener.emit('createLobby', msg)
     }
   })
@@ -375,33 +373,33 @@ const DiscordBot = () => {
   })
 
   // CHAT COMMAND : !GG nukes the discord server. Only General chat remains.
-  // bot.on('message', (message) => {
-  //   if (message.content === '!GG') {
-  //     const safeRoles = [ 'valoBOT', '@everyone', 'Dev Team' ]
+  bot.on('message', (message) => {
+    if (message.content === '!GG') {
+      const safeRoles = [ 'valoBOT', '@everyone', 'Dev Team' ]
 
-  //     if (message.author.username === 'Sentry') {
-  //       console.log(chalk.bgBlackBright('DESTOYING DISCORD - WIPING ALL CHANNELS AND ROLES'))
+      if (message.author.username === 'Sentry') {
+        console.log(chalk.bgBlackBright('DESTOYING DISCORD - WIPING ALL CHANNELS AND ROLES'))
 
-  //       message.guild.roles.cache.forEach((role) => {
-  //         console.log(
-  //           'role.name :',
-  //           role.name,
-  //           safeRoles.find((element) => {
-  //             console.log('element vs role:', element, role.name)
+        message.guild.roles.cache.forEach((role) => {
+          console.log(
+            'role.name :',
+            role.name,
+            safeRoles.find((element) => {
+              console.log('element vs role:', element, role.name)
 
-  //             element === role.name
-  //           })
-  //         )
+              element === role.name
+            })
+          )
 
-  //         safeRoles.find((element) => element === role.name) === undefined && role.delete()
-  //       })
+          safeRoles.find((element) => element === role.name) === undefined && role.delete()
+        })
 
-  //       message.guild.channels.cache.forEach((channel) => {
-  //         channel.name !== 'general' && channel.delete()
-  //       })
-  //     }
-  //   }
-  // })
+        message.guild.channels.cache.forEach((channel) => {
+          channel.name !== 'general' && channel.delete()
+        })
+      }
+    }
+  })
 
   return {}
 }

@@ -1,9 +1,10 @@
 import firebase from 'firebase/app'
 import 'firebase/firestore'
 import 'firebase/auth'
+require('dotenv').config()
 
 const firebaseConfig = {
-  apiKey: 'AIzaSyCqPn5N0CO7OdHCclWa8wIH6pJGahEYszQ',
+  apiKey: process.env.FIREBASE_API_KEY,
   authDomain: 'valovalorant-3a547.firebaseapp.com',
   databaseURL: 'https://valovalorant-3a547.firebaseio.com',
   projectId: 'valovalorant-3a547',
