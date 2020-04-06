@@ -27,16 +27,19 @@ lobbyStart - After a lobby gets 10 players and teams as split: Here we give perm
 */
 
 const DiscordBot = () => {
+  const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
+  console.log('DISCORD_BOT_TOKEN :', BOT_TOKEN)
+
   const bot = new Client()
-  bot.login(process.env.DISCORD_BOT_TOKEN)
+  bot.login(BOT_TOKEN)
 
   bot.on('ready', async () => {
     console.info(`Logged in as ${bot.user.tag}!`)
 
     lobbyListener.emit('botLoggedIn', bot.user) // Event Emitters - Callbacks, anywhere.. https://nodejs.org/api/events.html
 
-
-    const guild = bot.guilds.cache.get('695962481277009971')
+    // const guild = bot.guilds.cache.get('695962481277009971') // THIS ONE IS BROKEN?!
+    const guild = bot.guilds.cache.get('696685308271525918')
 
     // Lobby Creator - Create channels / permissions and update Firebase lobby
     lobbyListener.on('lobbyCreate', async (createdLobby) => {
@@ -250,6 +253,43 @@ const DiscordBot = () => {
       })
     })
 
+    lobbyListener.on('removeOldLobbies', async (lobbyRef) => {
+      console.log(chalk.blueBright('Checking for old lobbies to clean'))
+      // Loop through started lobbies (status 1) that are older than one hour..
+      let timestamp = new Date()
+      let newTime = new Date(timestamp.setHours(timestamp.getHours() + 1))
+
+      const getLobby = await db.collection('lobbies').doc(lobbyRef.id).get().then((doc) => doc.data())
+      
+
+      const lobbyToCheckArray = await db
+        .collection('lobbies')
+        .where('lobbyGroupId', '==', getLobby.lobbyGroupId)
+        .where('status', '==', 1)
+        .get()
+        .then((snapshot) => {
+          return snapshot.docs.map((doc) => doc.data())
+        })
+
+      console.log('lobbyToCheckArray :', lobbyToCheckArray)
+
+      const filtered = lobbyToCheckArray.filter((lobby) => {
+        return lobby.createdAt < newTime
+      })
+
+      console.log('filtered', filtered)
+
+      for (const lobby of filtered) {
+        db.collection('lobbies').doc(lobby.uid).delete().then(() => {
+          console.log(`Lobby Deleted`)
+        })
+      }
+
+      // Use discord to check whether those channels are empty - Because our server moves users to afk channel after 30 minutes, we can assume that lobby is dead (or not using!) if there are no players in chat. Maybe.
+
+      // If discord reports no users, send the channel to the bin.
+    })
+
     lobbyListener.on('cleanRemovedLobby', (data) => {
       //console.log('data :', data)
       /* 
@@ -269,15 +309,21 @@ const DiscordBot = () => {
         uid: '2D8EKzbhLqq05BQuRBKT'
       }
 */
-      data.discord.channels.map((channel) => {
-        guild.channels.cache.get(channel.id).delete().then(() => {
-          console.log('Channel Deleted: ', data.uid, channel.name)
-        })
-      })
 
-      guild.roles.cache.get(data.discord.permissionRoleId).delete().then(() => {
-        console.log('Role Deleted: ', data.uid, data.discord.permissionRoleId)
-      })
+      console.log(chalk.redBright('CLEANING ALL TRACE'))
+      try {
+        data.discord.channels.map((channel) => {
+          guild.channels.cache.get(channel.id).delete().then(() => {
+            console.log('Channel Deleted: ', data.uid, channel.name)
+          })
+        })
+
+        guild.roles.cache.get(data.discord.permissionRoleId).delete().then(() => {
+          console.log('Role Deleted: ', data.uid, data.discord.permissionRoleId)
+        })
+      } catch (e) {
+        console.log('e', e)
+      }
     })
   })
 

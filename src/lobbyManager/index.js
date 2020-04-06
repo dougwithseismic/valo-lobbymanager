@@ -33,6 +33,21 @@ export const LobbyManager = () => {
       return lobbyGroupContainer
     })
 
+    // Grab a snapshot of our current lobbies
+    db.collection('lobbies').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
+      // Listen for changes.
+      snapshot.docChanges().forEach((change) => {
+        lobbyListener.emit('lobbyChange', { change: change.type, data: { ...change.doc.data(), uid: change.doc.id } })
+      })
+
+      if (snapshot.size) {
+        // let lobbyList = snapshot.docs.map((doc) => doc.data())
+        // If there are no active lobbies, create one. HOW CAN WE SET UP DIFFERENT 'MODES'? THIS SHOULDNT LIVE HERE..
+      } else {
+        // No lobbies :( create one!
+      }
+    })
+
     lobbyListener.on('setLobbyMode', async (mode, msg) => {
       if (modeTypes.find((type) => type === mode)) {
         console.log(chalk.blueBright('Setting LobbyManager to', mode))
@@ -66,21 +81,6 @@ export const LobbyManager = () => {
         .then((ref) => db.collection('lobbyGroups').doc(ref.id).update({ uid: ref.id }))
     })
 
-    // Grab a snapshot of our current lobbies
-    db.collection('lobbies').orderBy('createdAt', 'desc').onSnapshot((snapshot) => {
-      // Listen for changes.
-      snapshot.docChanges().forEach((change) => {
-        lobbyListener.emit('lobbyChange', { change: change.type, data: { ...change.doc.data(), uid: change.doc.id } })
-      })
-
-      if (snapshot.size) {
-        // let lobbyList = snapshot.docs.map((doc) => doc.data())
-        // If there are no active lobbies, create one. HOW CAN WE SET UP DIFFERENT 'MODES'? THIS SHOULDNT LIVE HERE..
-      } else {
-        // No lobbies :( create one!
-      }
-    })
-
     lobbyListener.on('lobbyChange', ({ change, data }) => {
       // console.log('lobbyChange :', change, data)
       // Do something every time a lobby updates.
@@ -90,8 +90,17 @@ export const LobbyManager = () => {
       }
 
       // If a lobby is removed, let's remove the discord channels and permissions, too.
-      if (change === 'removed') {
-        lobbyListener.emit('cleanRemovedLobby', data)
+
+      switch (change) {
+        case 'removed':
+          lobbyListener.emit('cleanRemovedLobby', data)
+          break
+
+        case 'added':
+          break
+
+        default:
+          break
       }
 
       // When a lobby is added, lets delete old, unused lobbies by looking at the createdAt timestamp.
@@ -169,15 +178,17 @@ export const LobbyManager = () => {
   // Creates a lobby then returns the new lobby uid
   const createLobby = async (options = options || {}) => {
     console.log(chalk.blueBright('CREATING NEW LOBBY..'))
+    
     await db
       .collection('lobbies')
       .add(defaultLobby)
       .then(async (ref) => {
-        await db.collection('lobbies').doc(ref.id).update({ uid: ref.id, name: 'VALOVALORANT PICKUP', ...options }) // Updates don't return an object.
+        await db.collection('lobbies').doc(ref.id).update({ createdAt: new Date(), uid: ref.id, name: 'VALOVALORANT PICKUP', ...options }) // Updates don't return an object.
         return ref
       })
       .then((ref) => {
         lobbyListener.emit('lobbyCreate', ref)
+        lobbyListener.emit('removeOldLobbies', ref)
       })
       .catch((e) => console.log(e))
   }
@@ -188,7 +199,7 @@ export const LobbyManager = () => {
       .collection('lobbyGroups')
       .add(defaultLobbyGroup)
       .then(async (ref) => {
-        await db.collection('lobbyGroups').doc(ref.id).update({ uid: ref.id }) // Updates don't return an object.
+        await db.collection('lobbyGroups').doc(ref.id).update({ createdAt: new Date(), uid: ref.id }) // Updates don't return an object.
         return ref
       })
       .then((ref) => {
