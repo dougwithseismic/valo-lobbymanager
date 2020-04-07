@@ -354,7 +354,7 @@ const DiscordBot = () => {
       return
     }
 
-    const permissions = [ '696465775191654511', '696794529600241755', '696465527748427777' ] // Geezer ,Dev, Mix Mod.
+    const permissions = '696465527748427777'  // Geezer ,Dev, Mix Mod.
     const hasPermission = await msg.guild.member(msg.author.id).hasPermission(permissions)
 
     console.log('hasPermission :', hasPermission)
