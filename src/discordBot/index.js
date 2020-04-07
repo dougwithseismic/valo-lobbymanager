@@ -346,30 +346,50 @@ const DiscordBot = () => {
     })
   })
 
-  // CHAT COMMAND : !setup <name> <mode>
-  bot.on('message', (msg) => {
-    if (msg.author.username === 'Sentry' && msg.content.includes('!setup')) {
-      lobbyListener.emit('setupLobbyGroup', msg)
-    }
-  })
+  // TODO: Drop ifs for switch.
 
-  // CHAT COMMAND : !setmode *
-  bot.on('message', (msg) => {
-    if (msg.content.includes('!setmode')) {
-      const newMode = msg.content.substr(msg.content.indexOf(' ') + 1)
-      lobbyListener.emit('setLobbyMode', newMode, msg)
-    }
-  })
-
-  // CHAT COMMAND : !startmix
-  bot.on('message', (msg) => {
-    if (msg.content === '!startmix') {
-      lobbyListener.emit('createLobby', msg)
-    }
-  })
-
-  // CHAT COMMAND : !join
   bot.on('message', async (msg) => {
+    //for now, we'll just split up into admin commands versus no access needed.
+    // SHould have used that switch 🤮🤮
+
+    const permissions = [ '696465775191654511', '696794529600241755', '696465527748427777' ] // Geezer ,Dev, Mix Mod.
+    const hasPermission = await msg.guild.member(msg.author.id).hasPermission(permissions)
+
+    if (hasPermission) {
+      // CHAT COMMAND : !setup <name> <mode>
+      if (msg.content.includes('!setup')) {
+        lobbyListener.emit('setupLobbyGroup', msg)
+      }
+
+      // CHAT COMMAND : !setmode *
+      if (msg.content.includes('!setmode')) {
+        const newMode = msg.content.substr(msg.content.indexOf(' ') + 1)
+        lobbyListener.emit('setLobbyMode', newMode, msg)
+      }
+
+      // CHAT COMMAND : !startmix
+      if (msg.content === '!startmix') {
+        lobbyListener.emit('createLobby', msg)
+      }
+
+      // CHAT COMMAND : !stopmix
+      if (msg.content === '!stopmix') {
+        getActiveLobby(msg.channel.id).then(async (lobby) => {
+          if (lobby) {
+            db.collection('lobbies').doc(lobby.uid).delete().then(() => {
+              console.log(`Lobby Deleted`)
+              msg.reply('Pickup Lobby Closed.')
+            })
+          } else {
+            console.log(`No active lobby to close - Maybe a player needs to start one first`)
+          }
+        })
+      }
+    } 
+
+    // COMMANDS FOR EVERYONE - NO ADMIN NEEDED
+
+    // CHAT COMMAND : !join
     if (msg.content === '!join') {
       //lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
 
@@ -394,10 +414,8 @@ const DiscordBot = () => {
         }
       })
     }
-  })
 
-  // CHAT COMMAND : !leave
-  bot.on('message', (msg) => {
+    // CHAT COMMAND : !leave
     if (msg.content === '!leave') {
       //lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
       //TODO : Somehow get active lobby. Done but so hackily.. I hate async await
@@ -416,21 +434,6 @@ const DiscordBot = () => {
           }
         } else {
           console.log('Couldnt remove player - Perhaps they arent in the active lobby. ')
-        }
-      })
-    }
-  })
-  // CHAT COMMAND : !stopmix
-  bot.on('message', (msg) => {
-    if (msg.content === '!stopmix') {
-      getActiveLobby(msg.channel.id).then(async (lobby) => {
-        if (lobby) {
-          db.collection('lobbies').doc(lobby.uid).delete().then(() => {
-            console.log(`Lobby Deleted`)
-            msg.reply('Pickup Lobby Closed.')
-          })
-        } else {
-          console.log(`No active lobby to close - Maybe a player needs to start one first`)
         }
       })
     }

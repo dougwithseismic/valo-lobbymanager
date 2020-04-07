@@ -6,6 +6,7 @@ import 'babel-polyfill'
 // import "./app";
 
 import './discordBot'
+import './playerManager'
 import LobbyManager from './lobbyManager'
 
 LobbyManager().init()
