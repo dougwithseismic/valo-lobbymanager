@@ -13,6 +13,7 @@ export const LobbyManager = () => {
   let lobbyMode = 'auto'
   const modeTypes = [ 'auto', 'moderated' ]
 
+
   const init = async () => {
     console.log(chalk.bgBlack('##### Running Initial LobbyManager Setup #####'))
 
@@ -178,12 +179,15 @@ export const LobbyManager = () => {
   // Creates a lobby then returns the new lobby uid
   const createLobby = async (options = options || {}) => {
     console.log(chalk.blueBright('CREATING NEW LOBBY..'))
-    
+
     await db
       .collection('lobbies')
       .add(defaultLobby)
       .then(async (ref) => {
-        await db.collection('lobbies').doc(ref.id).update({ createdAt: new Date(), uid: ref.id, name: 'VALOVALORANT PICKUP', ...options }) // Updates don't return an object.
+        await db
+          .collection('lobbies')
+          .doc(ref.id)
+          .update({ createdAt: new Date(), uid: ref.id, name: 'VALOVALORANT PICKUP', ...options }) // Updates don't return an object.
         return ref
       })
       .then((ref) => {
@@ -223,6 +227,7 @@ export const LobbyManager = () => {
   const addPlayerToLobby = async (uid, user) => {
     let response = null
     // If the lobby is still accepting players, lets add more players.
+
     const lobby = await getLobbyData(uid)
 
     if (lobby !== undefined && lobby.status === 0) {
@@ -301,15 +306,6 @@ export const LobbyManager = () => {
   return { init, lobbyMode, getActiveLobby, addPlayerToLobby, findPlayerInLobby, findPlayer, getLobbyData }
 }
 
-// addPlayerToLobby('WIeztTgnggQHwS1tFEJu', {
-//   avatar: null,
-//   bot: false,
-//   discriminator: '1053',
-//   id: '154615361537310722',
-//   lastMessageChannelID: '695015685155192872',
-//   lastMessageID: '695256234374463520',
-//   source: 'discord',
-//   username: 'Sentry'
-// })
+
 
 export default LobbyManager

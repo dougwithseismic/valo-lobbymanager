@@ -1,5 +1,6 @@
 import Discord from 'discord.js'
 import { LobbyManager, lobbyListener } from '../lobbyManager'
+import { PlayerManager } from '../playerManager'
 import { initFirebase } from '../firebaseAuth.js'
 import { generateEmbedMessage } from '../helpers/lobbyHelpers'
 import chalk from 'chalk'
@@ -8,27 +9,11 @@ require('dotenv').config()
 
 const db = initFirebase()
 const { getActiveLobby, addPlayerToLobby, findPlayerInLobby, findPlayer, lobbyMode } = LobbyManager()
+const { registerPlayer } = PlayerManager()
 const { Client } = Discord
-
-/*
-DiscordBot() contains all the logic needed to interact with discord.js
-Most of the logic reacts to emitters from lobbyListener (imported from the LobbyManager)
-
-lobbyCreate - When a new lobby gets created, we generate new permissions & channels then update the lobby object 
-lobbyStart - After a lobby gets 10 players and teams as split: Here we give permissions & Move Discord players to their right places
-
-[x] !join - Adds a discord user to the queue TODO: Allow map votes with !join haven
-[x] !leave - Remove a discord user from the queue
-[ ] think of a good way to do votes - typing is lame, can we do it in a more interactive way?
-
-!GG - Nukes the server for when it gets messy (requires you to be Sentry. Change name to acheive same effect;)
-
-// TODO: Refactor lobbyListener logic to be handled by like a reducer, with one function and multiple switches.
-*/
 
 const DiscordBot = () => {
   const BOT_TOKEN = process.env.DISCORD_BOT_TOKEN
-  console.log('DISCORD_BOT_TOKEN :', BOT_TOKEN)
 
   const bot = new Client()
   bot.login(BOT_TOKEN)
@@ -344,16 +329,35 @@ const DiscordBot = () => {
         console.log('e', e)
       }
     })
-  })
 
-  // TODO: Drop ifs for switch.
+    lobbyListener.on('sendUserDM', (player, message) => {
+      player.send(message)
+    })
+
+    lobbyListener.on('giveUserRole', async (user, roleId) => {
+      try {
+        const role = guild.roles.cache.find((response) => (response.id = roleId))
+        const guildUser = await guild.members.fetch(user.id).then((result) => result)
+
+        guildUser.roles.add(role.id)
+      } catch (error) {
+        console.log('error  whilst adding role to user:', error)
+      }
+    })
+  })
 
   bot.on('message', async (msg) => {
     //for now, we'll just split up into admin commands versus no access needed.
     // SHould have used that switch 🤮🤮
 
+    if (msg.author.bot) {
+      return
+    }
+
     const permissions = [ '696465775191654511', '696794529600241755', '696465527748427777' ] // Geezer ,Dev, Mix Mod.
     const hasPermission = await msg.guild.member(msg.author.id).hasPermission(permissions)
+
+    console.log('hasPermission :', hasPermission)
 
     if (hasPermission) {
       // CHAT COMMAND : !setup <name> <mode>
@@ -385,17 +389,14 @@ const DiscordBot = () => {
           }
         })
       }
-    } 
+    }
 
     // COMMANDS FOR EVERYONE - NO ADMIN NEEDED
 
     // CHAT COMMAND : !join
     if (msg.content === '!join') {
-      //lobbyListener.emit('DISCORD_PLAYER_ADDED', { user: msg.author })
-
       //TODO : CHECK WHETHER PLAYER IS ALREADY IN A CURRENT LOBBY
       getActiveLobby(msg.channel.id).then((lobby) => {
-        console.log('lobby :', lobby)
         if (lobby) {
           console.log('found lobby!')
           const userObj = { ...msg.author, source: 'discord' }
@@ -436,6 +437,11 @@ const DiscordBot = () => {
           console.log('Couldnt remove player - Perhaps they arent in the active lobby. ')
         }
       })
+    }
+
+    if (msg.content.includes('!register')) {
+      const riotid = msg.content.substr(msg.content.indexOf(' ') + 1)
+      registerPlayer(msg.author, riotid)
     }
   })
 
