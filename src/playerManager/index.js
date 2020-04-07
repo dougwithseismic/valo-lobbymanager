@@ -36,6 +36,8 @@ export const PlayerManager = () => {
         player,
         ` **ERROR** - ${player.username}, Your RiotID should be in the format NAME#TAG - Make sure to include the whole ID. Please try again! `
       )
+
+      return
     }
 
     // Check for whether the player exists in db alreadyu
@@ -44,12 +46,14 @@ export const PlayerManager = () => {
       .then((snapshot) => snapshot.docs.map((doc) => doc.data()))
 
     // If found, return that player. If not, create.
+
     const registeredPlayer = foundPlayer.length > 0 ? foundPlayer[0] : await createPlayer(player, riotId)
+    console.log('registeredPlayer :', registeredPlayer)
 
     // If a user !registers multiple times, lets just override their riotId for now.
     // Seems kinda redundant.
 
-    PlayerCollection.doc(foundPlayer[0].uid).update({ riotId }).then(() => {
+    PlayerCollection.doc(registeredPlayer.uid).update({ riotId }).then(() => {
       // DM THEM with a success.
 
       lobbyListener.emit(
@@ -63,10 +67,11 @@ export const PlayerManager = () => {
 
   // Creates a player
   const createPlayer = async (player, riotId = null) => {
-    PlayerCollection.add({ ...player, ...defaultPlayer, createdAt: new Date(), riotId }).then((ref) => {
+    return PlayerCollection.add({ ...player, ...defaultPlayer, createdAt: new Date(), riotId }).then((ref) => {
       ref.update({ uid: ref.id })
       console.log(chalk.blueBright('Added Player To Database: ', ref.id))
-      return ref.id
+
+      return { uid: ref.id }
     })
   }
 
